@@ -7,6 +7,7 @@
 // Estados do AFD
 typedef enum { Q0, Q1, Q2, QLixo } Estado;
 
+
 // Estrutura para representar um lexema (token)
 typedef struct Lexema {
     char tipo[50];
@@ -32,6 +33,84 @@ int eh_digito(char c) {
     }
     return 0;
 }
+
+int eh_reservada(char* valor) {
+    // Verifica se o valor é uma palavra reservada
+    const char* reservadas[] = {"if", "repeat", "until", "end", "write", "read"};
+    int num_reservadas = 6;
+    for (int i = 0; i < num_reservadas; i++) {
+        if (strcmp(valor, reservadas[i]) == 0) {
+            return 1; // É uma palavra reservada
+        }
+    }
+    return 0; // Não é uma palavra reservada
+}
+
+//  programação do automato afd_palRes: if | repeat | until | end | write | read
+//  retorna o indice do proximo caractere a ser lido (estrategia lookahead)
+
+
+int AFD_NUM(char* cadeia, int verbose, int i, Lexema *lexema, int *k){
+    char traco[1000] = ""; // rastreamento dos estados (para o modo verbose)
+    Estado q = Q0;
+    if (verbose) {
+        strcat(traco, "Q0");
+    }
+    char c = cadeia[i];
+    int start_i = i; // guarda o indice inicial
+    if (!eh_digito(c)) {
+        q = QLixo;
+        if (verbose) {
+            strcat(traco, "->QLixo");
+        }
+    }
+    else {
+        // encontrou o primeiro caractere valido (um digito)
+        strcpy(lexema->tipo, "NUM");
+        int i_lexema = 0;
+        lexema->valor[i_lexema] = c;
+        i_lexema = i_lexema + 1;
+        q = Q1; // transição para Q1
+        if (verbose) {
+            strcat(traco, "->Q1");
+        }
+        i = i + 1; // move para o proximo caractere
+        while (cadeia[i] != '\0' && (eh_digito(cadeia[i]))) {
+            c = cadeia[i]; 
+
+            q = Q1; // Permanece em Q1 (estado de aceitação temporário)
+            if (verbose) {
+                strcat(traco, "->Q1");
+            }
+            lexema->valor[i_lexema] = c;
+            i_lexema = i_lexema + 1;
+            i = i + 1;
+        }
+        if (q != QLixo) {
+             q = Q2; // Transição final (estado de aceitação)
+             if (verbose) {
+                 strcat(traco, "->Q2");
+             }
+             // i já está posicionado no caractere lookahead (o primeiro que não pertence ao lexema).
+             lexema->valor[i_lexema] = '\0';
+             *k = *k + 1; // Incrementa o contador de lexemas
+        } else {
+             // Se o primeiro caractere não era letra, retornamos o índice inicial
+             i = start_i; 
+        }
+    }
+    if (verbose) {
+        printf("\nTraco: %s\n", traco);
+        printf("\nLexema: <%s,%s>\n", lexema->tipo, lexema->valor);
+    }
+    
+    // Retorna o índice do próximo caractere a ser processado
+    return i; 
+    
+
+}
+
+
 
 // Programação do autômato AFD_ID: [a-zA-Z]([a-zA-Z0-9]*)
 // Retorna o índice do próximo caractere a ser lido (estratégia lookahead)
@@ -99,7 +178,9 @@ int AFD_ID(char* cadeia, int verbose, int i, Lexema *lexema, int *k) {
              i = start_i; 
         }
     }
-
+    if (eh_reservada(lexema->valor)) {
+            strcpy(lexema->tipo, "RESERVADA");
+    }
     if (verbose) {
         printf("\nTraco: %s\n", traco);
         printf("\nLexema: <%s,%s>\n", lexema->tipo, lexema->valor);
@@ -193,6 +274,11 @@ void varredura(char* cadeia) {
         if (i > i_before) {
             continue;
         }
+
+        i = AFD_NUM(cadeia, 0, i, &lexema[k], &k);
+        if (i > i_before) {
+            continue;
+        }
         
         // 3. Tentar reconhecer um Símbolo (se AFD_ID falhou)
         i = AFD_simbolos(cadeia, 0, i, &lexema[k], &k);
@@ -201,12 +287,6 @@ void varredura(char* cadeia) {
             continue;
         }
         
-        // Se i não avançou após todas as tentativas, é um erro léxico ou caractere não reconhecido
-        if (i == i_before) {
-            printf("\nERRO LEXICO: Caractere nao reconhecido na posicao %d: '%c'\n", i, cadeia[i]);
-            // Avança para tentar recuperar do erro (opcional, dependendo da estratégia de erro)
-            i++; 
-        }
 
         /*
         * NOTA: Os exercícios 1 a 6 abaixo requerem a adição de novos AFDs
@@ -215,17 +295,10 @@ void varredura(char* cadeia) {
         * aplicar todos os AFDs em ordem de prioridade.
         */
 
-        /* Exercício 1: Projetar e implementar um AFD que reconheça
-        * as palavras da linguagem {if, repeat, until, end, write, read}.
-        */
-
         /* Exercício 2: Confeccionar um AFD que reconheça comentários dados
         * entre {} desde que sejam simples (não-aninhados).
         */
 
-        /* Exercício 3: Confeccionar um AFD que reconheça números naturais
-        * não sinalizados.
-        */
 
         /* Exercício 4: Confeccionar um AFD que reconheça "atribuições 
         * pascalinas/pascal-like" (:=).
@@ -254,7 +327,7 @@ int main() {
     // A string de teste original continha um símbolo '=' que era tratado como ID no AFD_ID
     // e depois como símbolo. Ajustei a varredura para priorizar a maior leitura possível.
     // E ajustei a string de teste para testar IDs e Símbolos
-    char teste[100] = "var1 = repeat + end; >";
+    char teste[100] = "var1 = repeat + end; > 123 53123 1";
 
     varredura(teste);
 
